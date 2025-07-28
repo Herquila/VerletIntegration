@@ -4,15 +4,15 @@
 #include <string.h>
 #include <time.h>
 
-#include "dependencies/include/GL/glew.h"
-#include "dependencies/include/GLFW/glfw3.h"
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
 
-#include "graphics.h"
 #include "shader.h"
+#include "graphics.h"
+#include "peripheral.h"
+#include "camera.h"
 #include "model.h"
 #include "verlet.h"
-#include "camera.h"
-#include "peripheral.h"
 
 // Preprocessor constants
 #define ANIMATION_TIME 90.0f // Frames
@@ -26,6 +26,7 @@ void cursor_enter_callback(GLFWwindow* window, int entered);
 void processInput(GLFWwindow* window);
 void updateCamera(GLFWwindow* window, Mouse* mouse, Camera* camera);
 void instantiateVerlets(VerletObject* objects, int size);
+void spawnVerlet(VerletObject* objects, int* numActive, int maxInstances, mfloat_t* position, mfloat_t* velocity, ParticleColor color, mfloat_t radius);
 
 // Settings
 const unsigned int SCR_WIDTH = 1280;
@@ -37,41 +38,61 @@ Camera* camera;
 float cameraRadius = 24.0f;
 int totalFrames = 0;
 
-int main()
-{
-    GLFWwindow* window;
 
-    /* Initialize the library */
-    if (!glfwInit())
-        return -1;
+const char* vertexShaderSource = "#version 330 core\n"
+    "layout (location = 0) in vec3 aPos;\n"
+    "void main()\n"
+    "{\n"
+    "    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "}\0";
+
+const char* fragmentShaderSource = "#version 330 core\n"
+    "out vec4 FragColor;\n"
+    "void main()\n"
+    "{\n"
+    "    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+    "}\0";
+
+int main() {
+    
+    GLFWwindow* window;
+    
+    // Initialize GLFW
+    if (!glfwInit()) {
+        return -1;  // Initialization failed
+    }
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_DEPTH_BITS, 24);  // Ensure depth buffer is available
 
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
-
-    /* Create a windowed mode window and its OpenGL context */
+    #ifdef __APPLE__
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    #endif
+    
+    // Create a windowed mode window and its OpenGL context
     window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Verlet Integration", NULL, NULL);
     if (!window) {
         glfwTerminate();
-        return -1;
+        return -1;  // Window or OpenGL context creation failed
     }
 
-    /* Make the window's context current */
+    // Make the window's context current
     glfwMakeContextCurrent(window);
 
     /* Set up a callback function for when the window is resized */
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSwapInterval(1);
-
+    
     /* Callback function for mouse enter/exit */
     glfwSetCursorEnterCallback(window, cursor_enter_callback);
 
-    /* Initialize GLEW */
-    glewInit();
+    // Initialize GLEW
+    glewExperimental = GL_TRUE;  // Ensures GLEW uses more modern techniques for managing OpenGL functionality
+    if (glewInit() != GLEW_OK) {
+        return -1;  // GLEW initialization failed
+    }
 
     /* OpenGL Settings */
     glClearColor(0.1, 0.1, 0.1, 1.0);
@@ -95,18 +116,19 @@ int main()
     unsigned int baseShader = createShader("shaders/base_vertex.glsl", "shaders/base_fragment.glsl");
 
     Mesh* mesh = createMesh("models/sphere.obj", true);
-    Mesh* cubeMesh = createMesh("models/cube.obj", false);
-
-    // Model* model = createModel(mesh);
-
+    //Mesh* cubeMesh = createMesh("models/cube.obj", false);
+    
     // Container
     mfloat_t containerPosition[VEC3_SIZE] = { 0, 0, 0 };
     mfloat_t rotation[VEC3_SIZE] = { 0, 0, 0 };
-
+    
     VerletObject* verlets = malloc(sizeof(VerletObject) * MAX_INSTANCES);
+    //for (int i = 0; i < MAX_INSTANCES; ++i) {
+    //    verlets[i].visible = false;
+    //   }
     instantiateVerlets(verlets, MAX_INSTANCES);
     int numActive = 0;
-
+    
     mfloat_t view[MAT4_SIZE];
     camera = createCamera((mfloat_t[]) { 0, 0, cameraRadius });
 
@@ -119,11 +141,13 @@ int main()
 
     srand(time(NULL));
 
-    /* Loop until the user closes the window */
+    // Main loop
+
     while (!glfwWindowShouldClose(window)) {
         /* Input */
         updateMouse(window, mouse);
         processInput(window);
+        int visibleCount = 0; // Count only visible objects
 
         if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
             addForce(verlets, numActive, (mfloat_t[]) { 0, 3, 0 }, -30.0f * NUM_SUBSTEPS);
@@ -146,18 +170,41 @@ int main()
         glUniformMatrix4fv(glGetUniformLocation(instanceShader, "view"),
             1, GL_FALSE, view);
         glUseProgram(0);
-
+        
+        
         /* Render here */
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-
+        
         if (1.0 / dt >= TARGET_FPS - 5 && glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS && numActive < MAX_INSTANCES) {
             numActive += ADDITION_SPEED;
         }
-
-        if (totalFrames % 60 == 0) {
-            sprintf(title, "FPS : %-4.0f | Balls : %-10d", 1.0 / dt, numActive);
-            glfwSetWindowTitle(window, title);
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
+            mfloat_t pos[VEC3_SIZE] = {0, 0, 0}; // spawn at origin or any position
+            mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
+            ParticleColor color = RED; // or random/color cycling
+            spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
         }
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
+            mfloat_t pos[VEC3_SIZE] = {0, 0, 0}; // spawn at origin or any position
+            mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
+            ParticleColor color = GREEN; // or random/color cycling
+            spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
+        }
+        if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+            mfloat_t pos[VEC3_SIZE] = {0, 0, 0}; // spawn at origin or any position
+            mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
+            ParticleColor color = BLUE; // or random/color cycling
+            spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
+        }
+        if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+            mfloat_t pos[VEC3_SIZE] = {0, 0, 0}; // spawn at origin or any position
+            mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
+            ParticleColor color = WHITE; // or random/color cycling
+            mfloat_t radius = VERLET_RADIUS; // or any desired radius
+            spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, radius);
+        }
+
+        //printf("Hello visiblecount: %d\n ", visibleCount); 
 
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
             containerPosition[0] -= 0.05f;
@@ -181,42 +228,66 @@ int main()
             updatePositions(verlets, numActive, sub_dt);
         }
 
+         // Assuming numActive is the number of active particles
         float verletPositions[numActive * VEC3_SIZE];
         float verletVelocities[numActive];
+        float verletColors[numActive * VEC3_SIZE]; // Array to store color data
 
         int posPointer = 0;
         int velPointer = 0;
+        int colorPointer = 0;
         for (int i = 0; i < numActive; i++) {
             VerletObject obj = verlets[i];
+            if (!obj.visible) continue; // Only process visible objects
+            // Position data
             verletPositions[posPointer++] = obj.current[0];
             verletPositions[posPointer++] = obj.current[1];
             verletPositions[posPointer++] = obj.current[2];
+
+            // Velocity data
             float vel = vec3_distance(obj.current, obj.previous) * 10;
             verletVelocities[velPointer++] = vel;
+
+            // Color data
+            verletColors[colorPointer++] = obj.colorVector[0];
+            verletColors[colorPointer++] = obj.colorVector[1];
+            verletColors[colorPointer++] = obj.colorVector[2];
+            visibleCount++; // Count only visible objects
         }
-
+        
+        if (totalFrames % 60 == 0) {
+            sprintf(title, "FPS : %-4.0f | Balls : %-10d | Inactive : %-10d", 1.0 / dt,numActive, visibleCount);
+            glfwSetWindowTitle(window, title);
+        }
+        // Update position VBO
         glBindBuffer(GL_ARRAY_BUFFER, mesh->positionVBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * INSTANCE_STRIDE * numActive, verletPositions);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * visibleCount * VEC3_SIZE, verletPositions);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+        // Update velocity VBO
         glBindBuffer(GL_ARRAY_BUFFER, mesh->velocityVBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * numActive, verletVelocities);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * visibleCount, verletVelocities);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        // Update color VBO
+        glBindBuffer(GL_ARRAY_BUFFER, mesh->colorVBO); // Assume you have created a VBO for colors
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(float) * visibleCount * VEC3_SIZE, verletColors);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+
 
         /* Draw instanced verlet objects */
-        drawInstanced(mesh, instanceShader, GL_TRIANGLES, numActive, verlets[0].radius);
+        drawInstanced(mesh, instanceShader, GL_TRIANGLES, visibleCount, verlets[0].radius);
 
         /* Container */
-        drawMesh(cubeMesh, baseShader, GL_TRIANGLES, containerPosition, rotation, CONTAINER_RADIUS * 2 + VERLET_RADIUS * 3);
-        // drawMesh(mesh, baseShader, GL_TRIANGLES, containerPosition, rotation, CONTAINER_RADIUS * 1.02);
-        // drawMesh(mesh, baseShader, GL_POINTS, containerPosition, rotation, CONTAINER_RADIUS * 1.02);
+        drawMesh(mesh, baseShader, GL_POINTS, containerPosition, rotation, CONTAINER_RADIUS * 1.02);
 
-        /* Swap front and back buffers */
+        // Swap front and back buffers
         glfwSwapBuffers(window);
-
-        /* Poll for and process events */
+        
+        // Poll for and process events
         glfwPollEvents();
-
+        
         /* Timing */
         dt = (float)glfwGetTime() - lastFrameTime;
         while (dt < 1.0f / TARGET_FPS) {
@@ -224,8 +295,15 @@ int main()
         }
         lastFrameTime = (float)glfwGetTime();
         totalFrames++;
+        //if (numActive > 0) {
+        //    VerletObject* obj = &verlets[0];
+        //    float vx = (obj->current[0] - obj->previous[0]) / dt;
+        //    float vy = (obj->current[1] - obj->previous[1]) / dt;
+        //    float vz = (obj->current[2] - obj->previous[2]) / dt;
+        //    printf("Particle 0 velocity: (%f, %f, %f)\n", vx, vy, vz);
+        //}
     }
-
+    free(verlets);
     glfwTerminate();
     return 0;
 }
@@ -258,28 +336,6 @@ void updateCamera(GLFWwindow* window, Mouse* mouse, Camera* camera)
         camera->pitch += 0.22f;
         cameraRadius += 0.01f;
     }
-
-    // if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
-    //     vec3_add(camera->position, camera->position, vec3_multiply_f(temp, camera->up, speed));
-
-    // if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
-    //     vec3_subtract(camera->position, camera->position, vec3_multiply_f(temp, camera->up, speed));
-
-    // // Mouse Movement
-    // if (cursorEntered) {
-
-    //     double dx = 0.1 * getDx(mouse);
-    //     double dy = 0.1 * getDy(mouse);
-    //     camera->yaw += dx;
-
-    //     camera->pitch -= dy;
-    //     if (camera->pitch > 89.0f) {
-    //         camera->pitch = 89.0f;
-    //     }
-    //     if (camera->pitch < -89.0f) {
-    //         camera->pitch = -89.0f;
-    //     }
-    // }
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -300,11 +356,14 @@ void cursor_enter_callback(GLFWwindow* window, int entered)
         // The cursor left the content area of the window
     }
 }
-
 void instantiateVerlets(VerletObject* objects, int size)
 {
     int distance = 7.0f;
+    ParticleColor colors[] = {RED, GREEN, BLUE};
+    int numColors = sizeof(colors)/sizeof(colors[0]);
+    printf("Hello size: %d\n ", size); 
     for (int i = 0; i < size; i++) {
+
         VerletObject* obj = &(objects[i]);
 
         // ====== LOOP ======
@@ -312,22 +371,31 @@ void instantiateVerlets(VerletObject* objects, int size)
         float z = MCOS(i) * distance;
         float xp = MSIN(i) * distance * 0.999;
         float zp = MCOS(i) * distance * 0.999;
-        float y = rand() % (2 - 1 + 1) + 1;
+        float y = 0;
         vec3(obj->current, x, y, z);
         vec3(obj->previous, xp, y, zp);
         vec3(obj->acceleration, 0, 0, 0);
         obj->radius = VERLET_RADIUS;
-
-        // ====== STREAM ======
-        // float x = (0 + i) % distance - distance / 2;
-        // float y = -2.0f;
-        // float z = -4.0f;
-        // float xp = x * 1.005;
-        // float yp = y * 1.002;
-        // float zp = z * 1.005;
-        // vec3(obj->current, x, y, z);
-        // vec3(obj->previous, xp, yp, zp);
-        // vec3(obj->acceleration, 0, 0, 0);
-        // obj->radius = VERLET_RADIUS;
+        obj->color = colors[i % numColors];
+        setColorVector(obj);
+        //obj->numBonds = 0;
+        //obj->bonds = NULL;  // Initially no bonds 
     }
+}
+void spawnVerlet(VerletObject* objects, int* numActive, int maxInstances, mfloat_t* position, mfloat_t* velocity, ParticleColor color, mfloat_t radius)
+{
+    if (*numActive >= maxInstances) {
+        return; // Cannot spawn more objects
+    }
+
+    VerletObject* obj = &objects[*numActive];
+    vec3(obj->current, position[0], position[1], position[2]);
+    vec3(obj->previous, position[0] - velocity[0], position[1] - velocity[1], position[2] - velocity[2]);
+    vec3(obj->acceleration, 0, 0, 0);
+    obj->radius = radius;
+    obj->color = color;
+    setColorVector(obj);
+    obj->visible = true;
+
+    (*numActive)++;
 }

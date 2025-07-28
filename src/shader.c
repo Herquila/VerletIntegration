@@ -3,7 +3,8 @@
 #include "shader.h"
 #include "util.h"
 
-#include "dependencies/include/GL/glew.h"
+//#include "dependencies/include/GL/glew.h"
+#include <GL/glew.h>
 
 unsigned int createShader(const char* vertexFile, const char* fragmentFile)
 {

@@ -14,6 +14,7 @@ typedef struct {
     unsigned int VBO;
     unsigned int positionVBO;
     unsigned int velocityVBO;
+    unsigned int colorVBO;
 } Mesh;
 
 typedef struct {

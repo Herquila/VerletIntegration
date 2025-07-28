@@ -8,11 +8,28 @@
 #define CONTAINER_RADIUS 6.0f
 #define VERLET_RADIUS 0.15f
 
+#include "uthash.h"
+#include <stdbool.h>
+
+
+
+typedef enum {
+    RED,
+    GREEN,
+    BLUE,
+    WHITE,
+    //INVISIBLE,
+    // Add more colors as needed
+} ParticleColor;
+
 typedef struct {
     mfloat_t current[VEC3_SIZE];
     mfloat_t previous[VEC3_SIZE];
     mfloat_t acceleration[VEC3_SIZE];
     mfloat_t radius;
+    ParticleColor color;
+    mfloat_t colorVector[VEC3_SIZE]; // Add a color vector to store RGB values
+    bool visible;
 } VerletObject;
 
 struct NodeStruct {
@@ -21,6 +38,8 @@ struct NodeStruct {
 };
 typedef struct NodeStruct Node;
 
+
+void setColorVector(VerletObject* obj);
 void applyForces(VerletObject* objects, int size);
 void applyCollisions(VerletObject* objects, int size);
 void applyConstraints(VerletObject* objects, int size, mfloat_t* containerPosition);

@@ -5,6 +5,7 @@ layout (location = 1) in vec3 vertexNormal;
 layout (location = 2) in vec2 vertexTexCoord;
 layout (location = 3) in vec3 instancePosition;
 layout (location = 4) in float instanceVelocity;
+layout(location = 5) in vec3 instanceColor;
 
 uniform float scale;
 uniform mat4 view;
@@ -13,6 +14,7 @@ uniform mat4 projection;
 out vec3 fragmentPos;
 out vec3 fragmentVertexNormal;
 out float fragmentVelocity;
+out vec3 fragmentColor;
 
 mat4 translationMatrix(vec3 translation)
 {
@@ -29,6 +31,7 @@ void main()
     fragmentPos = vec3(model * vec4(vertexPos, 1.0));
     fragmentVertexNormal = mat3(transpose(inverse(model))) * vertexNormal;
     fragmentVelocity = instanceVelocity;
+    fragmentColor = instanceColor;
 
     gl_Position = projection * view * vec4(fragmentPos, 1.0);
 }

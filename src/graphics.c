@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "dependencies/include/GL/glew.h"
+#include "GL/glew.h"
 
 #include "graphics.h"
 

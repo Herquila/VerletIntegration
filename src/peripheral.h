@@ -1,7 +1,7 @@
 #ifndef __PERIPHERAL_H__
 #define __PERIPHERAL_H__
 
-#include "dependencies/include/GLFW/glfw3.h"
+#include "GLFW/glfw3.h"
 
 typedef struct {
     double xpos;

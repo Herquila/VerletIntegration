@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "dependencies/include/GL/glew.h"
+#include "GL/glew.h"
 
 #define VERTEX_LIMIT 2000
 
@@ -72,6 +72,14 @@ Mesh* createMesh(const char* filename, bool instanced)
         glEnableVertexAttribArray(4);
         glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)0);
         glVertexAttribDivisor(4, 1);
+
+            // Color
+        glGenBuffers(1, &(mesh->colorVBO));
+        glBindBuffer(GL_ARRAY_BUFFER, mesh->colorVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * VEC3_SIZE * MAX_INSTANCES, NULL, GL_STREAM_DRAW);
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, VEC3_SIZE * sizeof(float), (void*)0);
+        glVertexAttribDivisor(5, 1);
     }
 
     // note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
@@ -108,7 +116,7 @@ DynamicArray* loadOBJ(const char* filename)
 
     char* line = NULL;
     size_t len = 0;
-    ssize_t read;
+    size_t read;
 
     while ((read = getline(&line, &len, fp)) != -1) {
         char* words[4];
