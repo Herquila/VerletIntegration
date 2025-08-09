@@ -38,7 +38,8 @@ bool cursorEntered = false;
 Camera* camera;
 float cameraRadius = 24.0f;
 int totalFrames = 0;
-
+// Enable/disable automatic orbiting of the camera
+bool autoOrbit = true;
 
 const char* vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
@@ -240,11 +241,24 @@ int main() {
         }
 
         float sub_dt = dt / NUM_SUBSTEPS;
+        // Press 'C' to clear all accelerations this frame
+        bool clearAccels = glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS;
         for (int i = 0; i < NUM_SUBSTEPS; i++) {
             applyForces(verlets, numActive);
+            if (clearAccels) {
+                for (int j = 0; j < numActive; ++j) {
+                    vec3_zero(verlets[j].acceleration);
+                }
+            }
             // applyCollisions(verlets, numActive);
             applyGridCollisions(verlets, numActive);
             applyConstraints(verlets, numActive, containerPosition);
+            // If clearing, also zero velocity by making previous == current before integration
+            if (clearAccels) {
+                for (int j = 0; j < numActive; ++j) {
+                    vec3_assign(verlets[j].previous, verlets[j].current);
+                }
+            }
             updatePositions(verlets, numActive, sub_dt);
         }
 
@@ -333,6 +347,30 @@ void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    // Axis-aligned camera views
+    if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS) {
+        autoOrbit = false;
+        camera->pitch = 0.0f;      // level
+        camera->yaw = 180.0f;      // look toward -X from +X
+        vec3(camera->position, cameraRadius, 0.0f, 0.0f);
+    }
+    if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS) {
+        autoOrbit = false;
+        camera->pitch = -90.0f;    // look down along -Y from +Y
+        // yaw is irrelevant when pitch is +/-90
+        vec3(camera->position, 0.0f, cameraRadius, 0.0f);
+    }
+    if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS) {
+        autoOrbit = false;
+        camera->pitch = 0.0f;      // level
+        camera->yaw = -90.0f;      // look toward -Z from +Z
+        vec3(camera->position, 0.0f, 0.0f, cameraRadius);
+    }
+    // Resume orbit
+    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
+        autoOrbit = true;
+    }
 }
 
 void updateCamera(GLFWwindow* window, Mouse* mouse, Camera* camera)
@@ -342,8 +380,10 @@ void updateCamera(GLFWwindow* window, Mouse* mouse, Camera* camera)
     mfloat_t temp[VEC3_SIZE];
 
     float universalAngle = totalFrames / 4.0f;
-    vec3(camera->position, MCOS(MRADIANS(universalAngle)) * cameraRadius, camera->position[1], MSIN(MRADIANS(universalAngle)) * cameraRadius);
-    camera->yaw = universalAngle + 180.0f;
+    if (autoOrbit) {
+        vec3(camera->position, MCOS(MRADIANS(universalAngle)) * cameraRadius, camera->position[1], MSIN(MRADIANS(universalAngle)) * cameraRadius);
+        camera->yaw = universalAngle + 180.0f;
+    }
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
         vec3_add(camera->position, camera->position, vec3_multiply_f(temp, camera->up, speed));
