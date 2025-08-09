@@ -19,6 +19,7 @@
 #define ADDITION_SPEED 10
 #define TARGET_FPS 60
 #define NUM_SUBSTEPS 8
+#define MAX_SPAWNS_PER_FRAME 1 // Limit how many particles can be spawned per render frame
 
 // Function prototypes
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
@@ -175,34 +176,55 @@ int main() {
         /* Render here */
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         
+        int spawnsThisFrame = 0; // Limit spawns per frame
+        
         if (1.0 / dt >= TARGET_FPS - 5 && glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS && numActive < MAX_INSTANCES) {
             numActive += ADDITION_SPEED;
         }
-        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
-            mfloat_t pos[VEC3_SIZE] = {0, 0, 0}; // spawn at origin or any position
+        // Auto-spawn every other second (2.0s)
+        {
+            static double lastAutoSpawnTime = 0.0;
+            double now = glfwGetTime();
+            if ((now - lastAutoSpawnTime) >= 1.0 && spawnsThisFrame < MAX_SPAWNS_PER_FRAME) {
+                // Spawn at the top (north pole) of the container sphere, offset by particle radius to keep it inside
+                mfloat_t pos[VEC3_SIZE] = { containerPosition[0], containerPosition[1] + CONTAINER_RADIUS - VERLET_RADIUS, containerPosition[2] };
+                mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
+                ParticleColor color = RED; // or random/color cycling
+                spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
+                spawnsThisFrame++;
+                lastAutoSpawnTime = now;
+            }
+        }
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS && spawnsThisFrame < MAX_SPAWNS_PER_FRAME) {
+            // Spawn at the top (north pole) of the container sphere, offset by particle radius to keep it inside
+            mfloat_t pos[VEC3_SIZE] = { containerPosition[0], containerPosition[1] + CONTAINER_RADIUS - VERLET_RADIUS, containerPosition[2] };
             mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
             ParticleColor color = RED; // or random/color cycling
             spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
+            spawnsThisFrame++;
         }
-        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS && spawnsThisFrame < MAX_SPAWNS_PER_FRAME) {
             mfloat_t pos[VEC3_SIZE] = {0, 0, 0}; // spawn at origin or any position
             mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
             ParticleColor color = GREEN; // or random/color cycling
             spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
+            spawnsThisFrame++;
         }
-        if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS && spawnsThisFrame < MAX_SPAWNS_PER_FRAME) {
             mfloat_t pos[VEC3_SIZE] = {0, 0, 0}; // spawn at origin or any position
             mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
             ParticleColor color = BLUE; // or random/color cycling
             spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
+            spawnsThisFrame++;
         }
-        if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+        if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS && spawnsThisFrame < MAX_SPAWNS_PER_FRAME) {
             mfloat_t pos[VEC3_SIZE] = {0, 0, 0}; // spawn at origin or any position
             mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
             ParticleColor color = WHITE; // or random/color cycling
             mfloat_t radius = VERLET_RADIUS; // or any desired radius
             spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, radius);
-        }
+            spawnsThisFrame++;
+        } 
 
         //printf("Hello visiblecount: %d\n ", visibleCount); 
 

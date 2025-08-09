@@ -5,7 +5,7 @@
 #include <string.h>
 #include <pthread.h>
 
-#define GRAVITY 0.0f
+#define GRAVITY -9.8f
 #define THREAD_COUNT 8
 
 
@@ -52,13 +52,16 @@ void setColorVector(VerletObject* obj) {
 }
 // Define interaction force based on colors
 mfloat_t interactionForce(ParticleColor color1, ParticleColor color2) {
-    if (color1 == RED && color2 == GREEN) {
-        return 1.0f;  // Example force value
-    }
-    if (color1 == GREEN && color2 == BLUE) {
-        return -0.5f; // Example force value
-    }
+    //if (color1 == RED && color2 == GREEN) {
+    //    return 1.0f;  // Example force value
+    //}
+    //if (color1 == GREEN && color2 == BLUE) {
+    //    return -0.5f; // Example force value
+    //}
     // Add more interaction rules as needed
+    if (color1 == RED && color2 == RED) {
+        return 10.0f;  // Example force value
+    }
     return 0.0f; // Default force
 }
 
@@ -82,10 +85,12 @@ void applyForces(VerletObject* objects, int size)
                 for (int k = 0; k < VEC3_SIZE; ++k) {
                     direction[k] /= dist;
                 }
+                // Inverse-square scaling of interaction force
+                mfloat_t scale = force / (dist * dist * dist); // F ∝ 1/r^2
                 // Apply the interaction force to both particles
                 for (int k = 0; k < VEC3_SIZE; ++k) {
-                    objects[i].acceleration[k] += force * direction[k];
-                    objects[j].acceleration[k] -= force * direction[k];
+                    objects[i].acceleration[k] += scale * direction[k];
+                    objects[j].acceleration[k] -= scale * direction[k];
                 }
             }
         }
