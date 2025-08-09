@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include <GL/glew.h>
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
 #include "shader.h"
@@ -13,6 +14,7 @@
 #include "camera.h"
 #include "model.h"
 #include "verlet.h"
+#include "hud.h"
 
 // Preprocessor constants
 #define ANIMATION_TIME 90.0f // Frames
@@ -112,6 +114,9 @@ int main() {
 
     glPointSize(3.0);
 
+    // Initialize HUD (Dear ImGui)
+    hud_init(window);
+
     /* Models & Shaders */
     unsigned int phongShader = createShader("shaders/phong_vertex.glsl", "shaders/phong_fragment.glsl");
     unsigned int instanceShader = createShader("shaders/instance_vertex.glsl", "shaders/instance_fragment.glsl");
@@ -150,6 +155,12 @@ int main() {
         updateMouse(window, mouse);
         processInput(window);
         int visibleCount = 0; // Count only visible objects
+
+        // Start HUD frame and update controls
+        hud_new_frame();
+        bool clearFromHUD = false;
+        float fps_for_ui = (dt > 1e-6f) ? (1.0f / dt) : (float)TARGET_FPS;
+        hud_update(fps_for_ui, numActive, &clearFromHUD, camera, &cameraRadius, &autoOrbit);
 
         if (glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS) {
             addForce(verlets, numActive, (mfloat_t[]) { 0, 3, 0 }, -30.0f * NUM_SUBSTEPS);
@@ -241,8 +252,8 @@ int main() {
         }
 
         float sub_dt = dt / NUM_SUBSTEPS;
-        // Press 'C' to clear all accelerations this frame
-        bool clearAccels = glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS;
+        // Press 'C' or HUD Clear to clear all accelerations this frame
+        bool clearAccels = (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) || clearFromHUD;
         for (int i = 0; i < NUM_SUBSTEPS; i++) {
             applyForces(verlets, numActive);
             if (clearAccels) {
@@ -316,6 +327,9 @@ int main() {
         /* Container */
         drawMesh(mesh, baseShader, GL_POINTS, containerPosition, rotation, CONTAINER_RADIUS * 1.02);
 
+        // Render HUD on top
+        hud_render();
+
         // Swap front and back buffers
         glfwSwapBuffers(window);
         
@@ -337,6 +351,8 @@ int main() {
         //    printf("Particle 0 velocity: (%f, %f, %f)\n", vx, vy, vz);
         //}
     }
+    // Shutdown HUD
+    hud_shutdown();
     free(verlets);
     glfwTerminate();
     return 0;
