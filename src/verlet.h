@@ -1,5 +1,3 @@
-
-
 #ifndef __VERLET_H__
 #define __VERLET_H__
 
@@ -30,6 +28,8 @@ typedef struct {
     ParticleColor color;
     mfloat_t colorVector[VEC3_SIZE]; // Add a color vector to store RGB values
     bool visible;
+    // Mass of the particle (depends on color)
+    mfloat_t mass;
 } VerletObject;
 
 struct NodeStruct {
@@ -40,6 +40,8 @@ typedef struct NodeStruct Node;
 
 
 void setColorVector(VerletObject* obj);
+// Initialize mass based on the particle color
+void setMassFromColor(VerletObject* obj);
 void applyForces(VerletObject* objects, int size);
 void applyCollisions(VerletObject* objects, int size);
 void applyConstraints(VerletObject* objects, int size, mfloat_t* containerPosition);

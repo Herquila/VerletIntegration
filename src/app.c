@@ -181,19 +181,17 @@ int main() {
         if (1.0 / dt >= TARGET_FPS - 5 && glfwGetKey(window, GLFW_KEY_V) == GLFW_PRESS && numActive < MAX_INSTANCES) {
             numActive += ADDITION_SPEED;
         }
-        // Auto-spawn every other second (2.0s)
-        {
-            static double lastAutoSpawnTime = 0.0;
-            double now = glfwGetTime();
-            if ((now - lastAutoSpawnTime) >= 1.0 && spawnsThisFrame < MAX_SPAWNS_PER_FRAME) {
-                // Spawn at the top (north pole) of the container sphere, offset by particle radius to keep it inside
-                mfloat_t pos[VEC3_SIZE] = { containerPosition[0], containerPosition[1] + CONTAINER_RADIUS - VERLET_RADIUS, containerPosition[2] };
-                mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
-                ParticleColor color = RED; // or random/color cycling
-                spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
-                spawnsThisFrame++;
-                lastAutoSpawnTime = now;
-            }
+        // Auto-spawn one red ball once per second at the top of the container
+        static double lastAutoSpawn = 0.0;
+        double now = glfwGetTime();
+        if (spawnsThisFrame < MAX_SPAWNS_PER_FRAME && (now - lastAutoSpawn) >= 1.0) {
+            // Spawn at the top (north pole) of the container sphere, offset by particle radius to keep it inside
+            mfloat_t pos[VEC3_SIZE] = { containerPosition[0], containerPosition[1] + CONTAINER_RADIUS - VERLET_RADIUS, containerPosition[2] };
+            mfloat_t vel[VEC3_SIZE] = {0, 0, 0}; // initial velocity
+            ParticleColor color = RED; // or random/color cycling
+            spawnVerlet(verlets, &numActive, MAX_INSTANCES, pos, vel, color, VERLET_RADIUS);
+            spawnsThisFrame++;
+            lastAutoSpawn = now;
         }
         if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS && spawnsThisFrame < MAX_SPAWNS_PER_FRAME) {
             // Spawn at the top (north pole) of the container sphere, offset by particle radius to keep it inside
@@ -400,6 +398,8 @@ void instantiateVerlets(VerletObject* objects, int size)
         obj->radius = VERLET_RADIUS;
         obj->color = colors[i % numColors];
         setColorVector(obj);
+        // Initialize mass from color
+        setMassFromColor(obj);
         //obj->numBonds = 0;
         //obj->bonds = NULL;  // Initially no bonds 
     }
@@ -417,6 +417,8 @@ void spawnVerlet(VerletObject* objects, int* numActive, int maxInstances, mfloat
     obj->radius = radius;
     obj->color = color;
     setColorVector(obj);
+    // Initialize mass from color
+    setMassFromColor(obj);
     obj->visible = true;
 
     (*numActive)++;

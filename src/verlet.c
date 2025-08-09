@@ -50,48 +50,62 @@ void setColorVector(VerletObject* obj) {
             break;
     }
 }
-// Define interaction force based on colors
-mfloat_t interactionForce(ParticleColor color1, ParticleColor color2) {
-    //if (color1 == RED && color2 == GREEN) {
-    //    return 1.0f;  // Example force value
-    //}
-    //if (color1 == GREEN && color2 == BLUE) {
-    //    return -0.5f; // Example force value
-    //}
-    // Add more interaction rules as needed
-    if (color1 == RED && color2 == RED) {
-        return 10.0f;  // Example force value
+
+// Mass per color and initializer
+static inline mfloat_t massForColor(ParticleColor c) {
+    switch (c) {
+        case RED:   return 20.0f; // heavy
+        case GREEN: return 2.0f; // medium
+        case BLUE:  return 1.0f; // light
+        case WHITE: return 0.8f; // very light
+        default:    return 1.0f;
     }
-    return 0.0f; // Default force
+}
+void setMassFromColor(VerletObject* obj) {
+    obj->mass = massForColor(obj->color);
+}
+
+// Define interaction force based on colors and masses
+mfloat_t interactionForce(const VerletObject* a, const VerletObject* b) {
+    // Base coupling by color pair (tunable coefficient)
+    mfloat_t K = 0.0f;
+    if (a->color == RED && b->color == RED) {
+        K = 0.5f;
+    }
+    // Add more interaction rules as needed
+
+    // Return symmetric force magnitude F = K * m_a * m_b
+    return K * a->mass * b->mass;
 }
 
 void applyForces(VerletObject* objects, int size)
 {
     for (int i = 0; i < size; i++) {
-        objects[i].acceleration[1] += GRAVITY;
+        // Gravity scaled by mass so heavier colors (e.g., RED) sink faster
+        objects[i].acceleration[1] += GRAVITY * objects[i].mass;
     }
     for (int i = 0; i < size; ++i) {
         for (int j = i + 1; j < size; ++j) {
-            mfloat_t force = interactionForce(objects[i].color, objects[j].color);
+            mfloat_t F = interactionForce(&objects[i], &objects[j]);
 
             // Compute the direction of the force
             mfloat_t direction[VEC3_SIZE];
             for (int k = 0; k < VEC3_SIZE; ++k) {
                 direction[k] = objects[j].current[k] - objects[i].current[k];
             }
-            // Normalize direction
             mfloat_t dist = vec3_length(direction);
-            if (dist > 1e-6) { // avoid division by zero
-                for (int k = 0; k < VEC3_SIZE; ++k) {
-                    direction[k] /= dist;
-                }
-                // Inverse-square scaling of interaction force
-                mfloat_t scale = force / (dist * dist * dist); // F ∝ 1/r^2
-                // Apply the interaction force to both particles
-                for (int k = 0; k < VEC3_SIZE; ++k) {
-                    objects[i].acceleration[k] += scale * direction[k];
-                    objects[j].acceleration[k] -= scale * direction[k];
-                }
+            mfloat_t minDist = objects[i].radius + objects[j].radius;
+            // Skip when overlapping or virtually coincident; let collision resolver handle
+            if (dist < MFLOAT_C(1e-6) || dist < minDist) continue;
+            // Normalize
+            for (int k = 0; k < VEC3_SIZE; ++k) direction[k] /= dist;
+            // Safe inverse-square
+            mfloat_t invR2 = 1.0f / (dist * dist);
+            mfloat_t scale_i = (F * invR2) / objects[i].mass;
+            mfloat_t scale_j = (F * invR2) / objects[j].mass;
+            for (int k = 0; k < VEC3_SIZE; ++k) {
+                objects[i].acceleration[k] += scale_i * direction[k];
+                objects[j].acceleration[k] -= scale_j * direction[k];
             }
         }
     }
@@ -102,13 +116,21 @@ void handleCollision(VerletObject* a, VerletObject* b)
     mfloat_t axis[VEC3_SIZE];
     vec3_subtract(axis, a->current, b->current);
     mfloat_t dist = vec3_length(axis);
-    if (dist < a->radius + b->radius) {
-        mfloat_t norm[VEC3_SIZE];
-        vec3_divide_f(norm, axis, dist);
-        mfloat_t delta = a->radius + b->radius - dist;
-        vec3_multiply_f(norm, norm, 0.5 * delta);
-        vec3_add(a->current, a->current, norm);
-        vec3_subtract(b->current, b->current, norm);
+    mfloat_t minDist = a->radius + b->radius;
+    if (dist < minDist) {
+        mfloat_t n[VEC3_SIZE];
+        if (dist > 1e-6f) {
+            vec3_divide_f(n, axis, dist);
+        } else {
+            // Fallback normal if particles are exactly coincident
+            n[0] = 1.0f; n[1] = 0.0f; n[2] = 0.0f;
+            dist = 0.0f;
+        }
+        mfloat_t delta = minDist - dist;
+        mfloat_t corr[VEC3_SIZE];
+        vec3_multiply_f(corr, n, 0.5f * delta);
+        vec3_add(a->current, a->current, corr);
+        vec3_subtract(b->current, b->current, corr);
     }
 }
 
@@ -352,5 +374,7 @@ void resetObjects(VerletObject* objects, int size, mfloat_t* initialPosition, mf
         setColorVector(obj); // sets colorVector and visible
         obj->visible = visible; // override if needed
         vec3_zero(obj->acceleration);
+        // Initialize mass based on color
+        setMassFromColor(obj);
     }
 }
